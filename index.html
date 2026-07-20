@@ -344,7 +344,28 @@ function normDni(s){ return (s||'').toString().trim(); }
    (reemplaza el almacenamiento interno de Claude para que la web
    funcione de forma independiente, con GPS real y datos persistentes)
 ========================================================= */
-let BACKEND_URL = localStorage.getItem('backendUrl') || '';
+function getBackendUrlFromQuery(){
+  try{
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('backend');
+    return v ? decodeURIComponent(v) : '';
+  }catch(e){ return ''; }
+}
+// Prioridad: 1) enlace en la propia URL (?backend=...) — sobrevive aunque el navegador borre datos locales
+//            2) lo guardado localmente en este navegador
+let BACKEND_URL = getBackendUrlFromQuery() || localStorage.getItem('backendUrl') || '';
+
+function persistBackendUrl(val){
+  BACKEND_URL = val;
+  try{ localStorage.setItem('backendUrl', val); }catch(e){ /* algunos navegadores bloquean localStorage */ }
+  // Refleja el enlace en la propia URL de la página, para que un marcador/acceso directo
+  // guardado desde este momento SIEMPRE recuerde la conexión, sin depender del navegador.
+  try{
+    const url = new URL(window.location.href);
+    url.searchParams.set('backend', val);
+    window.history.replaceState(null, '', url.toString());
+  }catch(e){ /* no crítico */ }
+}
 
 function showBackendSetupModal(closable){
   document.getElementById('modalSheet').innerHTML = `
@@ -353,6 +374,7 @@ function showBackendSetupModal(closable){
     <p class="hint">Pega aquí el enlace de tu Apps Script (el que termina en <b>/exec</b>) para que la ficha guarde y lea tus datos desde tu Google Sheet.</p>
     <input type="text" id="backendUrlInput" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(BACKEND_URL)}" style="margin:10px 0;">
     <button class="btn btn-primary btn-block" id="saveBackendUrl">Guardar y continuar</button>
+    <p class="hint" style="margin-top:12px;">Después de guardar, la dirección de esta página va a cambiar (le agrega tu enlace al final). <b>Guarda esa página en marcadores o en tu pantalla de inicio recién después de esto</b> — así, aunque el navegador borre otros datos, el acceso directo siempre recordará la conexión.</p>
   `;
   document.getElementById('modalOverlay').classList.add('open');
   const closeBtn = document.getElementById('closeBackendModal');
@@ -360,11 +382,10 @@ function showBackendSetupModal(closable){
   document.getElementById('saveBackendUrl').addEventListener('click', ()=>{
     const val = document.getElementById('backendUrlInput').value.trim();
     if(!val){ toast('Pega el enlace primero'); return; }
-    localStorage.setItem('backendUrl', val);
-    BACKEND_URL = val;
+    persistBackendUrl(val);
     document.getElementById('modalOverlay').classList.remove('open');
     state.cache.rows = null;
-    toast('Conectado con Google Sheets');
+    toast('Conectado con Google Sheets. Ahora guarda esta página en marcadores.');
     renderMain();
   });
 }
@@ -394,6 +415,31 @@ async function apiSaveRow(row){
   }catch(e){
     console.error('apiSaveRow error', e);
     toast('No se pudo guardar en Google Sheets. Verifica tu conexión.');
+    return false;
+  }
+}
+
+async function apiSavePhoto(dataUrl, pregunta){
+  if(!BACKEND_URL){ showBackendSetupModal(true); toast('Primero configura tu Google Sheet'); return false; }
+  const c = state.colaborador;
+  try{
+    const res = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action: 'savePhoto',
+        dataUrl,
+        pregunta,
+        dni: c.dni || '',
+        nombre: c.nombre || c.nombreManual || '',
+        gerencia: c.gerencia || c.gerenciaManual || ''
+      })
+    });
+    const data = await res.json();
+    return data && data.ok;
+  }catch(e){
+    console.error('apiSavePhoto error', e);
+    toast('No se pudo subir la foto a Google Drive. Verifica tu conexión.');
     return false;
   }
 }
@@ -572,7 +618,7 @@ function renderStep1(body){
     c.fotoVivienda = dataUrl;
     const img = document.getElementById('previewVivienda');
     img.src = dataUrl; img.style.display='block';
-    toast('Foto de vivienda agregada');
+    toast('Foto de vivienda agregada (se sube a Drive al finalizar la ficha)');
   });
 
   const dniInput = document.getElementById('f_dni');
@@ -857,14 +903,12 @@ function renderQuestionCard(q){
           <span>DNI: ${esc(state.colaborador.dni||'—')}</span>
           <span>Elemento: ${esc(q.elemento)}</span>
         </div>
-        <a class="file-btn" href="${formLink}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;margin-bottom:8px;">
-          📋 Abrir formulario y subir foto de ${esc(q.elemento)}
-        </a>
-        <p class="hint" style="margin-bottom:8px;">Se abrirá el formulario de Google con tu DNI, nombre, sede y gerencia ya completados. Selecciona manualmente "${esc(q.elemento)}" como elemento evaluado y sube la foto ahí.</p>
-        <label class="file-btn">📷 O adjuntar aquí directamente
+        <label class="file-btn">📷 Tomar / subir foto de ${esc(q.elemento)}
           <input type="file" accept="image/*" capture="environment" id="foto_${sid(q.code)}" style="display:none;">
         </label>
+        <p class="hint" style="margin:6px 0 8px;">Se sube sola a Google Drive, en la carpeta ${esc(state.colaborador.gerencia||state.colaborador.gerenciaManual||'[gerencia]')} → ${esc(state.colaborador.dni||'[DNI]')} - ${esc(state.colaborador.nombre||state.colaborador.nombreManual||'[nombre]')} → ${esc(q.elemento)}.</p>
         <img id="fotoPrev_${sid(q.code)}" class="photo-preview" style="${fotoData?'display:block':''}" src="${fotoData}">
+        <a class="map-link" href="${formLink}" target="_blank" rel="noopener" style="margin-top:8px;">📋 Prefiero usar el formulario de Google</a>
       </div>`;
   }
 
@@ -971,7 +1015,9 @@ function renderQuestionCard(q){
       state.answers[q.code] = {...(state.answers[q.code]||{}), foto: dataUrl};
       const img = div.querySelector(`#fotoPrev_${sid(q.code)}`);
       img.src = dataUrl; img.style.display='block';
-      toast('Foto adjuntada');
+      toast('Subiendo foto a Google Drive...');
+      const ok = await apiSavePhoto(dataUrl, q.elemento);
+      toast(ok ? `Foto de ${q.elemento} guardada en Drive` : `No se pudo subir la foto de ${q.elemento} a Drive`);
     });
   }
 
@@ -1003,6 +1049,12 @@ async function finalizarFicha(){
   const c = state.colaborador;
   const scores = computeScores();
   const id = uid();
+
+  // Subir la foto de fachada (si existe) recién ahora, que ya se conoce el DNI y la gerencia
+  if(c.fotoVivienda){
+    toast('Subiendo foto de fachada a Drive...');
+    await apiSavePhoto(c.fotoVivienda, 'Fachada de vivienda');
+  }
 
   // snapshot ligero de respuestas para análisis (sin fotos)
   const answersSnapshot = {};
@@ -1380,7 +1432,7 @@ async function openVisitDetail(id){
     <div class="nivel-pill" style="background:${niv.color};margin:8px 0;">${niv.label} · ${rec.total} pts</div>
     ${c.ubicacion ? `<p><a class="map-link" href="${c.ubicacion.mapsLink}" target="_blank">🗺️ Ver ubicación en Google Maps</a></p>`:''}
     ${c.direccionTexto ? `<p class="hint">Dirección: ${esc(c.direccionTexto)}</p>`:''}
-    <div style="margin-top:10px;">${photosHtml || '<p class="hint">Esta ficha no tiene fotos adjuntas en este dispositivo. Recuerda que las fotos de techo, paredes, piso y evidencia estructural se suben por separado mediante el formulario de Google.</p>'}</div>
+    <div style="margin-top:10px;">${photosHtml || '<p class="hint">Esta ficha no tiene fotos en este dispositivo — las fotos de techo, paredes, piso, evidencia estructural y fachada se guardan directamente en Google Drive, organizadas por gerencia y DNI del colaborador.</p>'}</div>
   `;
   document.getElementById('closeModal').addEventListener('click', closeModal);
   document.getElementById('modalOverlay').classList.add('open');
@@ -1467,6 +1519,7 @@ document.getElementById('settingsBtn').addEventListener('click', ()=> showBacken
 renderTabbar();
 renderMain();
 if(!BACKEND_URL) showBackendSetupModal(false);
+else persistBackendUrl(BACKEND_URL); // asegura que la URL de la página y el localStorage queden sincronizados
 
 </script>
 </body>
