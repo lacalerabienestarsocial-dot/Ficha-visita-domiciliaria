@@ -63,9 +63,6 @@ button{font-family:inherit;}
   pointer-events:none;
   z-index:0;
 }
-.app-header #settingsBtn{
-  z-index:2;
-}
 .app-header .eyebrow{
   font-size:11px; letter-spacing:.12em; text-transform:uppercase;
   opacity:.85; font-weight:600;
@@ -271,7 +268,6 @@ table.data-table tr:active{background:var(--accent-light);}
 <body>
 
 <div class="app-header">
-  <button id="settingsBtn" type="button" aria-label="Configurar Google Sheets" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;">⚙️</button>
   <div class="eyebrow">La Calera S.A.C. · Bienestar Social</div>
   <h1>Ficha de Visita Domiciliaria</h1>
   <div class="sub">Marcado rápido con valorización · Zonas de riesgo</div>
@@ -1470,12 +1466,14 @@ async function renderAnalisisGerencia(main){
         ${bar.html}
         <button class="btn btn-primary btn-block" id="ag_export" style="margin-top:10px;">⬇️ Descargar en Excel</button>
         <button class="btn btn-outline btn-block" id="ag_photos" style="margin-top:8px;">📁 Ver fotos en Drive</button>
+        <button class="btn btn-ghost btn-block" id="ag_settings" style="margin-top:8px;">⚙️ Configurar conexión con Google Sheets</button>
       </div>
       <div class="card">${body}</div>
     `;
     bar.bind(root);
     root.querySelector('#ag_export').addEventListener('click', (e)=> handleExportClick(filtered, e.target));
     root.querySelector('#ag_photos').addEventListener('click', openPhotosFolder);
+    root.querySelector('#ag_settings').addEventListener('click', ()=> showBackendSetupModal(true));
     root.querySelectorAll('[data-detail]').forEach(b=>{
       b.addEventListener('click', ()=> openVisitDetail(b.dataset.detail));
     });
@@ -1581,8 +1579,6 @@ function renderPreguntas(main){
 /* =========================================================
    INIT
 ========================================================= */
-document.getElementById('settingsBtn').addEventListener('click', ()=> showBackendSetupModal(true));
-
 renderTabbar();
 renderMain();
 if(!BACKEND_URL) showBackendSetupModal(false);
