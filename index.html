@@ -353,7 +353,10 @@ function getBackendUrlFromQuery(){
 }
 // Prioridad: 1) enlace en la propia URL (?backend=...) — sobrevive aunque el navegador borre datos locales
 //            2) lo guardado localmente en este navegador
-let BACKEND_URL = getBackendUrlFromQuery() || localStorage.getItem('backendUrl') || '';
+// Enlace de Apps Script ya integrado: cualquier dispositivo que abra esta web
+// queda conectado automáticamente, sin necesidad de configurar nada.
+const DEFAULT_BACKEND_URL = 'https://script.google.com/macros/s/AKfycby_HMealiOfvsD-U0zyfrAX2UAxq3rhwRXlKQHwK1bDw57E7ItxI5eGaPO5yYb6yJvdGQ/exec';
+let BACKEND_URL = getBackendUrlFromQuery() || localStorage.getItem('backendUrl') || DEFAULT_BACKEND_URL;
 
 function persistBackendUrl(val){
   BACKEND_URL = val;
@@ -1519,7 +1522,6 @@ document.getElementById('settingsBtn').addEventListener('click', ()=> showBacken
 renderTabbar();
 renderMain();
 if(!BACKEND_URL) showBackendSetupModal(false);
-else persistBackendUrl(BACKEND_URL); // asegura que la URL de la página y el localStorage queden sincronizados
 
 </script>
 </body>
