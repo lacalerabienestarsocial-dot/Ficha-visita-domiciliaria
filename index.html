@@ -63,7 +63,7 @@ button{font-family:inherit;}
   pointer-events:none;
   z-index:0;
 }
-.app-header #settingsBtn, .app-header #photosFolderBtn{
+.app-header #settingsBtn{
   z-index:2;
 }
 .app-header .eyebrow{
@@ -271,8 +271,7 @@ table.data-table tr:active{background:var(--accent-light);}
 <body>
 
 <div class="app-header">
-  <button id="settingsBtn" type="button" aria-label="Configurar Google Sheets" style="position:absolute;top:16px;right:56px;background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;">⚙️</button>
-  <button id="photosFolderBtn" type="button" aria-label="Ver fotos en Drive" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;">📁</button>
+  <button id="settingsBtn" type="button" aria-label="Configurar Google Sheets" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;">⚙️</button>
   <div class="eyebrow">La Calera S.A.C. · Bienestar Social</div>
   <h1>Ficha de Visita Domiciliaria</h1>
   <div class="sub">Marcado rápido con valorización · Zonas de riesgo</div>
@@ -563,13 +562,48 @@ function setView(v){
 /* =========================================================
    RENDER PRINCIPAL
 ========================================================= */
+// Código de acceso para proteger las secciones internas (análisis, colaboradores, preguntas).
+// El Formulario queda siempre abierto, porque lo llena tanto personal interno como externo.
+const ACCESS_CODE = 'VISITAS@2026';
+const PROTECTED_VIEWS = ['analisisRespuesta','analisisGerencia','colaboradores','preguntas'];
+
+function isUnlocked(){ return sessionStorage.getItem('analysisUnlocked') === 'true'; }
+
 function renderMain(){
   const main = document.getElementById('main');
+  if(PROTECTED_VIEWS.includes(state.view) && !isUnlocked()){
+    return renderAccessGate(main);
+  }
   if(state.view==='formulario') return renderFormulario(main);
   if(state.view==='analisisRespuesta') return renderAnalisisRespuesta(main);
   if(state.view==='analisisGerencia') return renderAnalisisGerencia(main);
   if(state.view==='colaboradores') return renderColaboradores(main);
   if(state.view==='preguntas') return renderPreguntas(main);
+}
+
+function renderAccessGate(main){
+  main.innerHTML = `
+    <div class="card" style="text-align:center;">
+      <div class="section-label">Acceso restringido</div>
+      <h3>Ingresa el código de acceso</h3>
+      <p class="hint">Esta sección es solo para el equipo de Bienestar Social.</p>
+      <input type="password" id="accessCodeInput" placeholder="Código de acceso" style="text-align:center;letter-spacing:2px;margin:12px 0;" autocomplete="off">
+      <button class="btn btn-primary btn-block" id="accessCodeBtn">Ingresar</button>
+    </div>
+  `;
+  const input = document.getElementById('accessCodeInput');
+  const tryUnlock = ()=>{
+    if(input.value.trim() === ACCESS_CODE){
+      sessionStorage.setItem('analysisUnlocked','true');
+      renderMain();
+    } else {
+      toast('Código incorrecto');
+      input.value='';
+    }
+  };
+  document.getElementById('accessCodeBtn').addEventListener('click', tryUnlock);
+  input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); tryUnlock(); } });
+  input.focus();
 }
 
 /* =========================================================
@@ -929,7 +963,6 @@ function renderQuestionCard(q){
   if(q.photo){
     const fotoData = existing.foto || '';
     const showPhoto = !q.photoOnlyIf || existing.value === q.photoOnlyIf;
-    const formLink = buildGoogleFormLink();
     inner += `
       <div class="photo-box" id="photoWrap_${sid(q.code)}" style="${showPhoto?'':'display:none'}">
         <div class="mini-meta">
@@ -941,7 +974,6 @@ function renderQuestionCard(q){
         </label>
         <p class="hint" style="margin:6px 0 8px;">Se sube sola a Google Drive, en la carpeta ${esc(state.colaborador.gerencia||state.colaborador.gerenciaManual||'[gerencia]')} → ${esc(state.colaborador.dni||'[DNI]')} - ${esc(state.colaborador.nombre||state.colaborador.nombreManual||'[nombre]')} → ${esc(q.elemento)}.</p>
         <img id="fotoPrev_${sid(q.code)}" class="photo-preview" style="${fotoData?'display:block':''}" src="${fotoData}">
-        <a class="map-link" href="${formLink}" target="_blank" rel="noopener" style="margin-top:8px;">📋 Prefiero usar el formulario de Google</a>
       </div>`;
   }
 
@@ -1135,14 +1167,12 @@ function renderResumen(main){
       ${state.finalizadoTemprano ? '<p class="hint" style="margin-top:6px;">La encuesta finalizó tras confirmarse que la vivienda no está en zona de riesgo.</p>':''}
     </div>
     <button class="btn btn-primary btn-block" id="nuevaFicha">+ Registrar nueva visita</button>
-    <button class="btn btn-outline btn-block" id="verFotosBtn" style="margin-top:10px;">📁 Ver fotos de esta visita en Drive</button>
   `;
   document.getElementById('nuevaFicha').addEventListener('click', ()=>{
     resetForm();
     renderMain();
     window.scrollTo(0,0);
   });
-  document.getElementById('verFotosBtn').addEventListener('click', openPhotosFolder);
 }
 
 /* =========================================================
@@ -1439,11 +1469,13 @@ async function renderAnalisisGerencia(main){
         <p class="hint" style="margin-bottom:8px;">${filtered.length} ficha(s) coinciden con los filtros seleccionados.</p>
         ${bar.html}
         <button class="btn btn-primary btn-block" id="ag_export" style="margin-top:10px;">⬇️ Descargar en Excel</button>
+        <button class="btn btn-outline btn-block" id="ag_photos" style="margin-top:8px;">📁 Ver fotos en Drive</button>
       </div>
       <div class="card">${body}</div>
     `;
     bar.bind(root);
     root.querySelector('#ag_export').addEventListener('click', (e)=> handleExportClick(filtered, e.target));
+    root.querySelector('#ag_photos').addEventListener('click', openPhotosFolder);
     root.querySelectorAll('[data-detail]').forEach(b=>{
       b.addEventListener('click', ()=> openVisitDetail(b.dataset.detail));
     });
@@ -1550,7 +1582,6 @@ function renderPreguntas(main){
    INIT
 ========================================================= */
 document.getElementById('settingsBtn').addEventListener('click', ()=> showBackendSetupModal(true));
-document.getElementById('photosFolderBtn').addEventListener('click', openPhotosFolder);
 
 renderTabbar();
 renderMain();
