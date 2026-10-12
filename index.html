@@ -263,6 +263,41 @@ table.data-table tr:active{background:var(--accent-light);}
   .option-row{padding:12px 14px;}
   input[type=text],input[type=number],input[type=tel],select,textarea{font-size:15.5px; padding:12px 14px;}
 }
+/* ---------- Reporte ---------- */
+.rp-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;}
+.rp-kpis div{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;}
+.rp-kpis b{display:block;font-family:'Poppins',sans-serif;font-size:26px;line-height:1.1;color:var(--title);}
+.rp-kpis span{font-size:11.5px;color:var(--muted);}
+.rp-gtable{font-size:11.5px;}.rp-gtable td,.rp-gtable th{padding:7px 4px;}.rp-gtable td:first-child{font-weight:600;}
+.rp-gtable td,.rp-gtable th{text-align:center;}
+.rp-gtable td:first-child,.rp-gtable th:first-child{text-align:left;}
+.rp-grow{cursor:pointer;}
+.rp-total td{background:var(--accent-light);font-weight:700;}
+.rp-map{height:320px;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-top:8px;}
+.rp-card{border:1px solid var(--border);border-left:6px solid var(--border);border-radius:12px;padding:12px;margin-top:10px;background:#fff;break-inside:avoid;}
+.rp-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;}
+.rp-nivel{color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:99px;white-space:nowrap;}
+.rp-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin-top:8px;font-size:12.5px;}
+.rp-meta span{display:block;font-size:10.5px;color:var(--muted);}
+.rp-meta .wide{grid-column:1/-1;}
+.rp-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.rp-actions .btn{padding:7px 11px;font-size:12px;text-decoration:none;}
+.rp-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px;}
+.rp-photo{display:block;text-decoration:none;color:var(--text);font-size:10.5px;}
+.rp-photo img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;}
+.rp-photo span{display:block;margin-top:2px;line-height:1.2;}
+.rp-nothumb{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--accent-light);border-radius:8px;color:var(--primary);font-weight:600;}
+.print-title{display:none;}
+@media print{
+  .app-header,.tabbar,.no-print,.leaflet-control,.toast{display:none !important;}
+  body{background:#fff;padding-bottom:0;}
+  .card{box-shadow:none;border:1px solid #ccc;break-inside:auto;}
+  .print-title{display:block;font-weight:700;font-size:14px;margin:0 0 8px;}
+  .rp-map{height:300px;}
+  .rp-photos{grid-template-columns:repeat(4,1fr);}
+  .table-scroll{max-height:none !important;overflow:visible !important;}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
 </style>
 </head>
 <body>
@@ -304,6 +339,7 @@ const state = {
 
 const NAV_ITEMS = [
   {id:'formulario', label:'Formulario', icon:'M9 12h6M9 16h6M9 8h3M6 4h9l3 3v13a1 1 0 01-1 1H6a1 1 0 01-1-1V5a1 1 0 011-1z'},
+  {id:'reporte', label:'Reporte', icon:'M12 3l9 16H3L12 3zM12 10v4M12 17h.01'},
   {id:'analisisRespuesta', label:'Por respuesta', icon:'M4 19V9m6 10V4m6 15v-7m6 7v-3M3 19h18'},
   {id:'analisisGerencia', label:'Por gerencia', icon:'M3 21h18M6 21V9l6-5 6 5v12M9 21v-6h6v6'},
   {id:'colaboradores', label:'Colaboradores', icon:'M17 20a4 4 0 00-8 0M12 12a4 4 0 100-8 4 4 0 000 8zM21 20a4 4 0 00-6.3-3.3M17 12a4 4 0 10-1.4-7.7'},
@@ -561,7 +597,7 @@ function setView(v){
 // Código de acceso para proteger las secciones internas (análisis, colaboradores, preguntas).
 // El Formulario queda siempre abierto, porque lo llena tanto personal interno como externo.
 const ACCESS_CODE = 'VISITAS@2026';
-const PROTECTED_VIEWS = ['analisisRespuesta','analisisGerencia','colaboradores','preguntas'];
+const PROTECTED_VIEWS = ['reporte','analisisRespuesta','analisisGerencia','colaboradores','preguntas'];
 
 function isUnlocked(){ return sessionStorage.getItem('analysisUnlocked') === 'true'; }
 
@@ -571,6 +607,7 @@ function renderMain(){
     return renderAccessGate(main);
   }
   if(state.view==='formulario') return renderFormulario(main);
+  if(state.view==='reporte') return renderReporte(main);
   if(state.view==='analisisRespuesta') return renderAnalisisRespuesta(main);
   if(state.view==='analisisGerencia') return renderAnalisisGerencia(main);
   if(state.view==='colaboradores') return renderColaboradores(main);
@@ -610,6 +647,7 @@ function resetForm(){
   state.answers = {};
   state.colaborador = {};
   state.finalizadoTemprano = false;
+  state.isSaving = false;
 }
 
 function renderFormulario(main){
@@ -891,7 +929,13 @@ function renderStep3(body){
   const back = document.getElementById('backStep2');
   if(back) back.addEventListener('click', ()=>{ state.step=2; renderMain(); window.scrollTo(0,0); });
   const fin = document.getElementById('finalizarBtn');
-  if(fin) fin.addEventListener('click', finalizarFicha);
+  if(fin) fin.addEventListener('click', (e)=>{
+    if(state.isSaving) return; // evita que dos clics rápidos (o un doble toque) creen dos fichas
+    state.isSaving = true;
+    e.target.disabled = true;
+    e.target.textContent = 'Guardando...';
+    finalizarFicha();
+  });
 }
 
 /* ---------- RENDER GENÉRICO DE PREGUNTA ---------- */
@@ -1574,6 +1618,270 @@ function renderPreguntas(main){
       ${block('riesgo','2. Zona de Riesgo')}
     </div>
   `;
+}
+
+/* =========================================================
+   REPORTE DE CASOS CRÍTICOS Y ALTOS
+========================================================= */
+const photoCache = {};      // dni -> [{pregunta,name,url,thumb}]
+let photoCountsCache = null; // dni -> n
+
+function dedupeByDni(visits){
+  const m = {};
+  visits.forEach(v=>{
+    const k = v.dni || v.id;
+    if(!m[k] || (v.timestamp||0) > (m[k].timestamp||0)) m[k] = v;
+  });
+  return Object.values(m);
+}
+
+async function apiPhotoCounts(){
+  if(photoCountsCache) return photoCountsCache;
+  try{
+    const r = await fetch(BACKEND_URL + '?action=photoCounts');
+    const d = await r.json();
+    photoCountsCache = d.counts || {};
+  }catch(e){ photoCountsCache = null; }
+  return photoCountsCache || {};
+}
+
+async function apiGetPhotos(dni, withThumbs){
+  const key = dni + (withThumbs ? '' : '|nothumb');
+  if(photoCache[dni] && (withThumbs ? photoCache[dni].some(p=>p.thumb) || !photoCache[dni].length : true)) return photoCache[dni];
+  try{
+    const r = await fetch(BACKEND_URL + '?action=getPhotos&dni=' + encodeURIComponent(dni) + (withThumbs ? '' : '&thumbs=0'));
+    const d = await r.json();
+    if(d.error) throw new Error(d.error);
+    photoCache[dni] = d.photos || [];
+  }catch(e){
+    console.error('apiGetPhotos', e);
+    return null;
+  }
+  return photoCache[dni];
+}
+
+function photosGridHtml(photos){
+  if(photos === null) return '<p class="hint">No se pudieron cargar las fotos. Revisa que el script de Google esté actualizado.</p>';
+  if(!photos.length) return '<p class="hint">Esta persona no tiene fotos en Drive.</p>';
+  return `<div class="rp-photos">${photos.map(p=>`
+    <a href="${esc(p.url)}" target="_blank" rel="noopener" class="rp-photo">
+      ${p.thumb ? `<img src="${p.thumb}" alt="${esc(p.pregunta)}">` : `<div class="rp-nothumb">Ver foto</div>`}
+      <span>${esc(p.pregunta)}</span>
+    </a>`).join('')}</div>`;
+}
+
+async function loadPersonPhotos(card){
+  const dni = card.dataset.dni;
+  const box = card.querySelector('.rp-photobox');
+  if(box.dataset.loaded) return;
+  box.innerHTML = '<p class="hint">Cargando fotos...</p>';
+  const photos = await apiGetPhotos(dni, true);
+  box.innerHTML = photosGridHtml(photos);
+  if(photos) box.dataset.loaded = '1';
+}
+
+async function renderReporte(main){
+  main.innerHTML = `<div class="card"><p class="hint">Cargando datos...</p></div>`;
+  const all = dedupeByDni(await getIndex());
+  main.innerHTML = `<div id="rpRoot"></div>`;
+  const root = document.getElementById('rpRoot');
+  let map = null;
+  let counts = {};
+  draw();
+  apiPhotoCounts().then(c=>{ counts = c; if(root.isConnected) draw(true); });
+
+  function draw(keepScroll){
+    const f = root.querySelector('#rp_sede') ? currentFilters('rp', root) : {sede:'',gerencia:'',unidad:''};
+    const nivelSel = root.querySelector('#rp_nivel') ? root.querySelector('#rp_nivel').value : 'ambos';
+    const scrollY = window.scrollY;
+    const base = applyFilters(all, f);
+    const cases = base.filter(v => nivelSel==='critico' ? v.nivelKey==='critico' : nivelSel==='alto' ? v.nivelKey==='alto' : (v.nivelKey==='critico'||v.nivelKey==='alto'))
+      .sort((a,b)=> (a.total - b.total));
+    const nC = base.filter(v=>v.nivelKey==='critico').length;
+    const nA = base.filter(v=>v.nivelKey==='alto').length;
+    const nPhotos = base.reduce((s,v)=> s + (counts[v.dni]||0), 0);
+
+    // por gerencia
+    const byG = {};
+    base.forEach(v=>{
+      const g = v.gerencia || '(sin gerencia)';
+      const d = byG[g] = byG[g] || {critico:0,alto:0,medio:0,bajo:0,total:0,fotos:0};
+      d[v.nivelKey] = (d[v.nivelKey]||0)+1; d.total++; d.fotos += counts[v.dni]||0;
+    });
+    const gRows = Object.entries(byG).sort((a,b)=> (b[1].critico-a[1].critico) || (b[1].alto-a[1].alto) || (b[1].total-a[1].total));
+    const tot = gRows.reduce((t,[,d])=>{ ['critico','alto','medio','bajo','total','fotos'].forEach(k=>t[k]+=d[k]); return t; }, {critico:0,alto:0,medio:0,bajo:0,total:0,fotos:0});
+
+    const bar = buildFilterBar('rp', all, ()=>draw());
+    root.innerHTML = `
+      <div class="card no-print">
+        <h3>Reporte de casos críticos y altos</h3>
+        <p class="hint" style="margin-bottom:8px;">Una fila por persona (si tiene varias fichas, se toma la más reciente).</p>
+        ${bar.html}
+        <select id="rp_nivel" style="margin-top:8px;">
+          <option value="ambos">Mostrar: Críticos y altos</option>
+          <option value="critico">Mostrar: Solo críticos</option>
+          <option value="alto">Mostrar: Solo altos</option>
+        </select>
+        <button class="btn btn-primary btn-block" id="rp_excel" style="margin-top:10px;">⬇️ Descargar reporte en Excel</button>
+        <button class="btn btn-outline btn-block" id="rp_print" style="margin-top:8px;">🖨️ Imprimir / guardar en PDF (con fotos)</button>
+      </div>
+      <div class="print-title">Reporte de casos críticos y altos — Bienestar Social, La Calera S.A.C. — ${new Date().toLocaleDateString('es-PE')}</div>
+      <div class="card">
+        <h3>Resumen</h3>
+        <div class="rp-kpis">
+          <div style="border-color:${CRITICIDAD.critico.color}"><b style="color:${CRITICIDAD.critico.color}">${nC}</b><span>Críticos</span></div>
+          <div style="border-color:${CRITICIDAD.alto.color}"><b style="color:${CRITICIDAD.alto.color}">${nA}</b><span>Altos</span></div>
+          <div><b>${base.length}</b><span>Personas visitadas</span></div>
+          <div><b>${photoCountsCache===null && !Object.keys(counts).length ? '…' : nPhotos}</b><span>Fotos tomadas</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Detalle por gerencia</h3>
+        <p class="hint" style="margin-bottom:8px;">Cantidad de personas por nivel y fotos tomadas. Toca una gerencia para filtrar.</p>
+        ${gRows.length ? `<div class="table-scroll" style="max-height:none;"><table class="data-table rp-gtable">
+          <thead><tr><th>Gerencia</th><th>Críticos</th><th>Altos</th><th>Medios</th><th>Bajos</th><th>Total</th><th>Fotos</th></tr></thead>
+          <tbody>
+            ${gRows.map(([g,d])=>`<tr data-g="${esc(g)}" class="rp-grow">
+              <td>${esc(g)}</td>
+              <td style="color:${CRITICIDAD.critico.color};font-weight:700;">${d.critico}</td>
+              <td style="color:${CRITICIDAD.alto.color};font-weight:700;">${d.alto}</td>
+              <td>${d.medio}</td><td>${d.bajo}</td><td><b>${d.total}</b></td><td>${d.fotos}</td></tr>`).join('')}
+            <tr class="rp-total"><td>Total</td><td>${tot.critico}</td><td>${tot.alto}</td><td>${tot.medio}</td><td>${tot.bajo}</td><td>${tot.total}</td><td>${tot.fotos}</td></tr>
+          </tbody></table></div>` : emptyState('Aún no hay fichas registradas con estos filtros.')}
+      </div>
+      <div class="card">
+        <h3>Ubicación de los casos (${cases.length})</h3>
+        <div id="rpMap" class="rp-map"></div>
+        <div class="legend"><span><i style="background:${CRITICIDAD.critico.color}"></i>Crítico</span><span><i style="background:${CRITICIDAD.alto.color}"></i>Alto</span></div>
+      </div>
+      <div class="card">
+        <h3>Personas en situación crítica y alta</h3>
+        <div id="rpCards">${cases.length ? '<p class="hint">Cargando detalle...</p>' : emptyState('No hay casos críticos o altos con estos filtros.')}</div>
+      </div>`;
+    bar.bind(root);
+    const sec = root.querySelector('#rp_seccion'); if(sec) sec.style.display='none';
+    // restaurar valores
+    ['sede','gerencia','unidad'].forEach(k=>{ const el = root.querySelector('#rp_'+k); if(el) el.value = f[k]; });
+    root.querySelector('#rp_nivel').value = nivelSel;
+    root.querySelector('#rp_nivel').addEventListener('change', ()=>draw());
+    root.querySelectorAll('.rp-grow').forEach(tr=> tr.addEventListener('click', ()=>{
+      const sel = root.querySelector('#rp_gerencia');
+      const g = tr.dataset.g;
+      if([...sel.options].some(o=>o.value===g)){ sel.value = g; draw(); window.scrollTo(0,0); }
+    }));
+    root.querySelector('#rp_excel').addEventListener('click', e=> exportReporteExcel(cases, gRows, tot, e.target));
+    root.querySelector('#rp_print').addEventListener('click', e=> printReporte(e.target));
+    if(keepScroll) window.scrollTo(0, scrollY);
+    drawCards(cases);
+  }
+
+  async function drawCards(cases){
+    const box = root.querySelector('#rpCards');
+    const fulls = [];
+    for(const v of cases) fulls.push(await getFullVisit(v.id));
+    if(!root.isConnected) return;
+    // mapa
+    const mapEl = root.querySelector('#rpMap');
+    if(map){ try{ map.remove(); }catch(e){} map = null; }
+    const pts = [];
+    if(typeof L !== 'undefined' && mapEl){
+      map = L.map(mapEl, {zoomControl:true}).setView([-12.05,-77.04], 8);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+      cases.forEach((v,i)=>{
+        const u = fulls[i] && fulls[i].colaborador && fulls[i].colaborador.ubicacion;
+        if(u && u.lat!=null && u.lng!=null){
+          const col = CRITICIDAD[v.nivelKey].color;
+          const m = L.circleMarker([u.lat,u.lng], {radius:9, color:'#fff', weight:2, fillColor:col, fillOpacity:1}).addTo(map);
+          m.bindPopup(`<b>${esc(v.nombre)}</b><br>${esc(v.gerencia||'')}<br>${CRITICIDAD[v.nivelKey].label} (${v.total} pts)`);
+          pts.push([u.lat,u.lng]);
+        }
+      });
+      if(pts.length) map.fitBounds(pts, {padding:[30,30], maxZoom:15});
+      setTimeout(()=>map && map.invalidateSize(), 200);
+    }
+    if(!cases.length) return;
+    box.innerHTML = cases.map((v,i)=>{
+      const c = (fulls[i] && fulls[i].colaborador) || {};
+      const u = c.ubicacion;
+      const niv = CRITICIDAD[v.nivelKey];
+      const n = counts[v.dni];
+      return `<div class="rp-card" data-dni="${esc(v.dni)}" style="border-left-color:${niv.color}">
+        <div class="rp-head">
+          <div><b>${esc(v.nombre)}</b><div class="hint">DNI ${esc(v.dni)}${c.puesto?' · '+esc(c.puesto):''}</div></div>
+          <span class="rp-nivel" style="background:${niv.color}">${niv.label} · ${v.total} pts</span>
+        </div>
+        <div class="rp-meta">
+          <div><span>Gerencia</span>${esc(v.gerencia||'-')}</div>
+          <div><span>Unidad</span>${esc(v.unidad||'-')}</div>
+          <div><span>Sede</span>${esc(v.sede||'-')}</div>
+          <div><span>Situación / Riesgo</span>${v.scoreSituacion ?? '-'} / ${v.scoreRiesgo ?? '-'}</div>
+          <div class="wide"><span>Dirección</span>${esc(c.direccionTexto || c.direccionBD || 'Sin dirección registrada')}</div>
+        </div>
+        <div class="rp-actions no-print">
+          ${u && u.mapsLink ? `<a class="btn btn-ghost" href="${esc(u.mapsLink)}" target="_blank" rel="noopener">📍 Cómo llegar</a>` : ''}
+          <button class="btn btn-ghost" data-photos>📷 Ver fotos${n!=null?` (${n})`:''}</button>
+          <button class="btn btn-ghost" data-ficha="${esc(v.id)}">Ver ficha</button>
+        </div>
+        <div class="rp-photobox"></div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.rp-card').forEach(card=>{
+      card.querySelector('[data-photos]').addEventListener('click', ()=> loadPersonPhotos(card));
+      card.querySelector('[data-ficha]').addEventListener('click', e=> openVisitDetail(e.target.dataset.ficha));
+    });
+  }
+}
+
+async function printReporte(btn){
+  const cards = [...document.querySelectorAll('#rpCards .rp-card')];
+  if(!cards.length){ toast('No hay casos para imprimir con estos filtros.'); return; }
+  const old = btn.textContent; btn.disabled = true;
+  try{
+    for(let i=0;i<cards.length;i++){
+      btn.textContent = `Cargando fotos ${i+1}/${cards.length}...`;
+      await loadPersonPhotos(cards[i]);
+    }
+  } finally { btn.textContent = old; btn.disabled = false; }
+  const mapEl = document.getElementById('rpMap');
+  setTimeout(()=> window.print(), 300);
+}
+
+async function exportReporteExcel(cases, gRows, tot, btn){
+  if(typeof XLSX === 'undefined'){ toast('No se pudo cargar el módulo de Excel. Verifica tu conexión.'); return; }
+  if(!cases.length){ toast('No hay casos para exportar con estos filtros.'); return; }
+  const old = btn.textContent; btn.disabled = true;
+  try{
+    const casos = [];
+    for(let i=0;i<cases.length;i++){
+      btn.textContent = `Generando ${i+1}/${cases.length}...`;
+      const v = cases[i];
+      const full = await getFullVisit(v.id);
+      const c = (full && full.colaborador) || {};
+      const u = c.ubicacion || {};
+      const photos = (await apiGetPhotos(v.dni, false)) || [];
+      casos.push({
+        'Nivel': CRITICIDAD[v.nivelKey].label,
+        'Puntaje total': v.total,
+        'Puntaje Situación': v.scoreSituacion,
+        'Puntaje Riesgo': v.scoreRiesgo,
+        'DNI': v.dni, 'Nombre': v.nombre, 'Puesto': c.puesto || '',
+        'Gerencia': v.gerencia || '', 'Unidad organizativa': v.unidad || '', 'Sede': v.sede || '',
+        'Dirección': c.direccionTexto || c.direccionBD || '',
+        'Latitud': u.lat ?? '', 'Longitud': u.lng ?? '',
+        'Enlace Google Maps': u.mapsLink || '',
+        'Cantidad de fotos': photos.length,
+        'Enlaces de fotos': photos.map(p=>p.pregunta+': '+p.url).join('\n')
+      });
+    }
+    const resumen = gRows.map(([g,d])=>({'Gerencia':g,'Críticos':d.critico,'Altos':d.alto,'Medios':d.medio,'Bajos':d.bajo,'Total personas':d.total,'Fotos':d.fotos}));
+    resumen.push({'Gerencia':'TOTAL','Críticos':tot.critico,'Altos':tot.alto,'Medios':tot.medio,'Bajos':tot.bajo,'Total personas':tot.total,'Fotos':tot.fotos});
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen por gerencia');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(casos), 'Casos críticos y altos');
+    XLSX.writeFile(wb, `Reporte_Casos_Criticos_Altos_${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast('Reporte descargado');
+  }catch(err){ console.error(err); toast('Ocurrió un error generando el reporte'); }
+  finally{ btn.textContent = old; btn.disabled = false; }
 }
 
 /* =========================================================
