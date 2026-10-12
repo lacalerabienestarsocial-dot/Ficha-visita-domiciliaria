@@ -287,6 +287,10 @@ table.data-table tr:active{background:var(--accent-light);}
 .rp-photo img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;}
 .rp-photo span{display:block;margin-top:2px;line-height:1.2;}
 .rp-nothumb{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--accent-light);border-radius:8px;color:var(--primary);font-weight:600;}
+.rz{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;margin-top:2px;}
+.rz-si{background:#fde7e5;color:#b3261e;}
+.rz-no{background:#e3f3e8;color:#00622d;}
+.rz-nd{background:#eee;color:#666;}
 .print-title{display:none;}
 @media print{
   .app-header,.tabbar,.no-print,.leaflet-control,.toast{display:none !important;}
@@ -1570,6 +1574,7 @@ async function openVisitDetail(id){
     <h3>Ficha de ${esc(rec.nombre)}</h3>
     <p class="hint">DNI ${esc(rec.dni)} · ${esc(rec.gerencia)} · ${esc(rec.unidad)}${c.puesto?' · '+esc(c.puesto):''}</p>
     <div class="nivel-pill" style="background:${niv.color};margin:8px 0;">${niv.label} · ${rec.total} pts</div>
+    <p style="margin:6px 0;">${riesgoBadge(rec)}</p>
     ${c.ubicacion ? `<p><a class="map-link" href="${c.ubicacion.mapsLink}" target="_blank">🗺️ Ver ubicación en Google Maps</a></p>`:''}
     ${c.direccionTexto ? `<p class="hint">Dirección: ${esc(c.direccionTexto)}</p>`:''}
     ${answersBlock('situacion','1. Situación de vivienda', rec.scoreSituacion)}
@@ -1720,6 +1725,15 @@ async function loadPersonPhotos(card){
   if(photos) box.dataset.loaded = '1';
 }
 
+function riesgoBadge(rec){
+  const ans = (rec && (rec.answersFull || rec.answers)) || {};
+  const r = ans['2.1'] && ans['2.1'].value;
+  const tipo = ans['2.2'] && ans['2.2'].value;
+  if(r === 'Sí') return `<span class="rz rz-si">⚠️ Sí, en zona de riesgo${tipo ? ' · ' + esc(tipo) : ''}</span>`;
+  if(r === 'No') return `<span class="rz rz-no">✔ No está en zona de riesgo</span>`;
+  return `<span class="rz rz-nd">Sin dato</span>`;
+}
+
 async function renderReporte(main){
   main.innerHTML = `<div class="card"><p class="hint">Cargando datos...</p></div>`;
   const all = dedupeByDni(await getIndex());
@@ -1860,7 +1874,8 @@ async function renderReporte(main){
           <div><span>Gerencia</span>${esc(v.gerencia||'-')}</div>
           <div><span>Unidad</span>${esc(v.unidad||'-')}</div>
           <div><span>Sede</span>${esc(v.sede||'-')}</div>
-          <div><span>Situación / Riesgo</span>${v.scoreSituacion ?? '-'} / ${v.scoreRiesgo ?? '-'}</div>
+          <div><span>Puntaje de situación de vivienda</span>${v.scoreSituacion ?? '-'} pts</div>
+          <div><span>¿Vive en zona de riesgo?</span>${riesgoBadge(fulls[i] || v)}</div>
           <div class="wide"><span>Dirección</span>${esc(c.direccionTexto || c.direccionBD || 'Sin dirección registrada')}</div>
         </div>
         <div class="rp-actions no-print">
@@ -1911,6 +1926,8 @@ async function exportReporteExcel(cases, gRows, tot, btn, counts){
         'Puntaje total': v.total,
         'Puntaje Situación': v.scoreSituacion,
         'Puntaje Riesgo': v.scoreRiesgo,
+        '¿Vive en zona de riesgo?': ((full && full.answersFull && full.answersFull['2.1'] && full.answersFull['2.1'].value) || 'Sin dato'),
+        'Tipo de riesgo': ((full && full.answersFull && full.answersFull['2.2'] && full.answersFull['2.2'].value) || ''),
         'DNI': v.dni, 'Nombre': v.nombre, 'Puesto': c.puesto || '',
         'Gerencia': v.gerencia || '', 'Unidad organizativa': v.unidad || '', 'Sede': v.sede || '',
         'Dirección': c.direccionTexto || c.direccionBD || '',
