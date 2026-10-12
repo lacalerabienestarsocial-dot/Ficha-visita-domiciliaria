@@ -1809,8 +1809,8 @@ async function renderReporte(main){
           <div style="border-color:${CRITICIDAD.alto.color}"><b style="color:${CRITICIDAD.alto.color}">${nA}</b><span>Altos</span></div>
           <div style="border-color:${CRITICIDAD.medio.color}"><b style="color:${CRITICIDAD.medio.color}">${base.filter(v=>v.nivelKey==='medio').length}</b><span>Medios</span></div>
           <div style="border-color:${CRITICIDAD.bajo.color}"><b style="color:${CRITICIDAD.bajo.color}">${base.filter(v=>v.nivelKey==='bajo').length}</b><span>Bajos</span></div>
-          <div><b>${base.length}</b><span>Personas visitadas</span></div>
-          <div><b>${photoCountsCache===null && !Object.keys(counts).length ? '…' : nPhotos}</b><span>Fotos tomadas</span></div>
+          <div><b>${visBase}/${proyTotal}</b><span>Personas visitadas</span></div>
+          <div style="border-color:var(--primary)"><b style="color:var(--primary)">${pct(visBase)}%</b><span>Avance de visitas</span><div class="rp-prog"><div style="width:${pct(visBase)}%"></div></div></div>
         </div>
       </div>
       <div class="card">
