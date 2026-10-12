@@ -1534,17 +1534,52 @@ async function openVisitDetail(id){
   Object.entries(rec.answersFull||{}).forEach(([code,a])=>{
     if(a.foto) photosHtml += `<img src="${a.foto}" style="width:100%;border-radius:10px;margin-bottom:8px;">`;
   });
+  const ans = rec.answersFull || rec.answers || {};
+  function answerText(q, a){
+    if(!a) return '';
+    if(q.type==='checkbox') return (a.values||[]).join(', ');
+    if(q.type==='number_score') return (a.value===undefined||a.value===null||a.value==='') ? '' : String(a.value);
+    if(q.type==='composicion' || q.type==='hacinamiento'){
+      const parts = q.fields.map(f=> (a.fields && a.fields[f.key]!==undefined && a.fields[f.key]!=='') ? `${f.label}: <b>${esc(a.fields[f.key])}</b>` : '').filter(Boolean);
+      if(q.type==='hacinamiento' && a.indice!==undefined && a.indice!=='') parts.push(`Índice de hacinamiento: <b>${esc(a.indice)}</b>`);
+      return parts.join('<br>');
+    }
+    return a.value ? esc(a.value) : '';
+  }
+  function answersBlock(sec, title, score){
+    const items = QUESTIONS[sec].map(q=>{
+      const a = ans[q.code];
+      const txt = answerText(q, a);
+      const pts = (a && a.pts!==undefined && a.pts!==null) ? a.pts : null;
+      return `<div class="ref-card" style="margin-bottom:10px;">
+        <div class="section-label">${q.code}</div>
+        <p style="font-weight:600;font-size:13px;margin-bottom:4px;">${esc(q.title)}</p>
+        <p style="font-size:13.5px;">${txt || '<span class="hint">Sin respuesta</span>'}${pts!==null?` <span class="hint">(${pts>0?'+':''}${pts} pts)</span>`:''}</p>
+        ${a && a.obs ? `<p class="hint">Observación: ${esc(a.obs)}</p>`:''}
+      </div>`;
+    }).join('');
+    return `<h3 style="margin:14px 0 6px;">${title} <span class="hint">· ${score ?? '-'} pts</span></h3>${items}`;
+  }
   document.getElementById('modalSheet').innerHTML = `
     <button class="modal-close" id="closeModal">✕</button>
     <h3>Ficha de ${esc(rec.nombre)}</h3>
-    <p class="hint">DNI ${esc(rec.dni)} · ${esc(rec.gerencia)} · ${esc(rec.unidad)}</p>
+    <p class="hint">DNI ${esc(rec.dni)} · ${esc(rec.gerencia)} · ${esc(rec.unidad)}${c.puesto?' · '+esc(c.puesto):''}</p>
     <div class="nivel-pill" style="background:${niv.color};margin:8px 0;">${niv.label} · ${rec.total} pts</div>
     ${c.ubicacion ? `<p><a class="map-link" href="${c.ubicacion.mapsLink}" target="_blank">🗺️ Ver ubicación en Google Maps</a></p>`:''}
     ${c.direccionTexto ? `<p class="hint">Dirección: ${esc(c.direccionTexto)}</p>`:''}
-    <div style="margin-top:10px;">${photosHtml || '<p class="hint">Esta ficha no tiene fotos en este dispositivo — las fotos de techo, paredes, piso, evidencia estructural y fachada se guardan directamente en Google Drive, organizadas por gerencia y DNI del colaborador.</p>'}</div>
+    ${answersBlock('situacion','1. Situación de vivienda', rec.scoreSituacion)}
+    ${answersBlock('riesgo','2. Zona de riesgo', rec.scoreRiesgo)}
+    <h3 style="margin:14px 0 6px;">Fotos</h3>
+    <div id="modalPhotos">${photosHtml || '<p class="hint">Cargando fotos de Drive...</p>'}</div>
   `;
   document.getElementById('closeModal').addEventListener('click', closeModal);
   document.getElementById('modalOverlay').classList.add('open');
+  if(!photosHtml && rec.dni){
+    apiGetPhotos(rec.dni, true).then(ph=>{
+      const box = document.getElementById('modalPhotos');
+      if(box) box.innerHTML = photosGridHtml(ph);
+    });
+  }
 }
 function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); }
 document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') closeModal(); });
