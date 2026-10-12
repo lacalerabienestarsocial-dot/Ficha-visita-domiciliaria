@@ -291,6 +291,13 @@ table.data-table tr:active{background:var(--accent-light);}
 .rz-si{background:#fde7e5;color:#b3261e;}
 .rz-no{background:#e3f3e8;color:#00622d;}
 .rz-nd{background:#eee;color:#666;}
+.rp-det{margin-top:10px;border:1px solid var(--border);border-radius:12px;background:#fff;}
+.rp-det summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:13.5px;color:var(--title);list-style:none;display:flex;justify-content:space-between;align-items:center;}
+.rp-det summary::-webkit-details-marker{display:none;}
+.rp-det summary::after{content:'▾';transition:transform .2s;}
+.rp-det[open] summary::after{transform:rotate(180deg);}
+.rp-det .table-scroll{margin:0 10px 10px;}
+@media print{.rp-det{border:none;}.rp-det:not([open]) > *:not(summary){display:block;}}
 .rp-prog{height:12px;background:var(--accent-light);border-radius:99px;overflow:hidden;margin-top:10px;}
 .rp-prog div{height:100%;background:var(--primary);border-radius:99px;}
 .print-title{display:none;}
@@ -1824,17 +1831,17 @@ async function renderReporte(main){
         </div>
         <div class="rp-prog"><div style="width:${pct(visBase)}%"></div></div>
         ${fueraBase ? `<p class="hint" style="margin-top:6px;">Además hay ${fueraBase} persona(s) visitada(s) que no están en la base de colaboradores (no cuentan en el avance).</p>` : ''}
-        <h4 style="margin:14px 0 6px;font-size:13px;">Por sede</h4>
+        <details class="rp-det"><summary>Ver desglose por sede</summary>
         <div class="table-scroll" style="max-height:none;"><table class="data-table rp-gtable">
-          <thead><tr><th>Sede</th><th>Proyectadas</th><th>Realizadas</th><th>Pendientes</th><th>Avance</th></tr></thead>
+          <thead><tr><th>Sede</th><th>Meta</th><th>Hechas</th><th>Faltan</th><th>%</th></tr></thead>
           <tbody>${Object.entries(avS).sort((a,b)=>b[1].proy-a[1].proy).map(rowAv).join('')}</tbody>
-        </table></div>
-        <h4 style="margin:14px 0 6px;font-size:13px;">Por gerencia</h4>
+        </table></div></details>
+        <details class="rp-det"><summary>Ver desglose por gerencia</summary>
         <div class="table-scroll" style="max-height:none;"><table class="data-table rp-gtable">
-          <thead><tr><th>Gerencia</th><th>Proyectadas</th><th>Realizadas</th><th>Pendientes</th><th>Avance</th></tr></thead>
+          <thead><tr><th>Gerencia</th><th>Meta</th><th>Hechas</th><th>Faltan</th><th>%</th></tr></thead>
           <tbody>${Object.entries(avG).sort((a,b)=>b[1].proy-a[1].proy).map(rowAv).join('')}
           <tr class="rp-total"><td>Total</td><td>${proyTotal}</td><td>${visBase}</td><td>${proyTotal-visBase}</td><td>${pct(visBase)}%</td></tr></tbody>
-        </table></div>
+        </table></div></details>
       </div>
       <div class="card">
         <h3>Detalle por gerencia</h3>
