@@ -291,6 +291,8 @@ table.data-table tr:active{background:var(--accent-light);}
 .rz-si{background:#fde7e5;color:#b3261e;}
 .rz-no{background:#e3f3e8;color:#00622d;}
 .rz-nd{background:#eee;color:#666;}
+.rp-prog{height:12px;background:var(--accent-light);border-radius:99px;overflow:hidden;margin-top:10px;}
+.rp-prog div{height:100%;background:var(--primary);border-radius:99px;}
 .print-title{display:none;}
 @media print{
   .app-header,.tabbar,.no-print,.leaflet-control,.toast{display:none !important;}
@@ -1765,6 +1767,22 @@ async function renderReporte(main){
     const gRows = Object.entries(byG).sort((a,b)=> (b[1].critico-a[1].critico) || (b[1].alto-a[1].alto) || (b[1].total-a[1].total));
     const tot = gRows.reduce((t,[,d])=>{ ['critico','alto','medio','bajo','total','fotos'].forEach(k=>t[k]+=d[k]); return t; }, {critico:0,alto:0,medio:0,bajo:0,total:0,fotos:0});
 
+    // ---- Avance de visitas vs. meta proyectada (base de colaboradores) ----
+    const colabByDni = {};
+    COLABORADORES.forEach(c=>{ colabByDni[c.dni] = c; });
+    const proyList = Object.values(colabByDni).filter(c=>
+      (!f.sede || c.sede===f.sede) && (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad));
+    const visitedSet = new Set(base.map(v=>v.dni));
+    const avG = {}, avS = {};
+    const addAv = (obj,k,done)=>{ const d = obj[k] = obj[k] || {proy:0,vis:0}; d.proy++; if(done) d.vis++; };
+    proyList.forEach(c=>{ const done = visitedSet.has(c.dni); addAv(avG, c.gerencia||'(sin gerencia)', done); addAv(avS, c.sede||'(sin sede)', done); });
+    const proyTotal = proyList.length;
+    const visBase = proyList.filter(c=>visitedSet.has(c.dni)).length;
+    const fueraBase = base.filter(v=>!colabByDni[v.dni]).length;
+    const pendientes = proyList.filter(c=>!visitedSet.has(c.dni));
+    const pct = n=> proyTotal ? Math.round(n/proyTotal*100) : 0;
+    const avance = {proyTotal, visBase, fueraBase, pendientes, avG, avS};
+    const rowAv = ([k,d])=>`<tr><td>${esc(k)}</td><td>${d.proy}</td><td><b>${d.vis}</b></td><td>${d.proy-d.vis}</td><td>${d.proy?Math.round(d.vis/d.proy*100):0}%</td></tr>`;
     const bar = buildFilterBar('rp', all, ()=>draw());
     root.innerHTML = `
       <div class="card no-print">
@@ -1794,6 +1812,29 @@ async function renderReporte(main){
           <div><b>${base.length}</b><span>Personas visitadas</span></div>
           <div><b>${photoCountsCache===null && !Object.keys(counts).length ? '…' : nPhotos}</b><span>Fotos tomadas</span></div>
         </div>
+      </div>
+      <div class="card">
+        <h3>Avance de visitas</h3>
+        <p class="hint" style="margin-bottom:8px;">Meta: visitar a los ${proyTotal} colaboradores de la base${(f.sede||f.gerencia||f.unidad)?' (con los filtros elegidos)':''}.</p>
+        <div class="rp-kpis">
+          <div><b>${visBase}</b><span>Visitas realizadas</span></div>
+          <div><b>${proyTotal}</b><span>Visitas proyectadas</span></div>
+          <div><b>${proyTotal - visBase}</b><span>Pendientes</span></div>
+          <div style="border-color:var(--primary)"><b style="color:var(--primary)">${pct(visBase)}%</b><span>Avance</span></div>
+        </div>
+        <div class="rp-prog"><div style="width:${pct(visBase)}%"></div></div>
+        ${fueraBase ? `<p class="hint" style="margin-top:6px;">Además hay ${fueraBase} persona(s) visitada(s) que no están en la base de colaboradores (no cuentan en el avance).</p>` : ''}
+        <h4 style="margin:14px 0 6px;font-size:13px;">Por sede</h4>
+        <div class="table-scroll" style="max-height:none;"><table class="data-table rp-gtable">
+          <thead><tr><th>Sede</th><th>Proyectadas</th><th>Realizadas</th><th>Pendientes</th><th>Avance</th></tr></thead>
+          <tbody>${Object.entries(avS).sort((a,b)=>b[1].proy-a[1].proy).map(rowAv).join('')}</tbody>
+        </table></div>
+        <h4 style="margin:14px 0 6px;font-size:13px;">Por gerencia</h4>
+        <div class="table-scroll" style="max-height:none;"><table class="data-table rp-gtable">
+          <thead><tr><th>Gerencia</th><th>Proyectadas</th><th>Realizadas</th><th>Pendientes</th><th>Avance</th></tr></thead>
+          <tbody>${Object.entries(avG).sort((a,b)=>b[1].proy-a[1].proy).map(rowAv).join('')}
+          <tr class="rp-total"><td>Total</td><td>${proyTotal}</td><td>${visBase}</td><td>${proyTotal-visBase}</td><td>${pct(visBase)}%</td></tr></tbody>
+        </table></div>
       </div>
       <div class="card">
         <h3>Detalle por gerencia</h3>
@@ -1829,7 +1870,7 @@ async function renderReporte(main){
       const g = tr.dataset.g;
       if([...sel.options].some(o=>o.value===g)){ sel.value = g; draw(); window.scrollTo(0,0); }
     }));
-    root.querySelector('#rp_excel').addEventListener('click', e=> exportReporteExcel(cases, gRows, tot, e.target, counts));
+    root.querySelector('#rp_excel').addEventListener('click', e=> exportReporteExcel(cases, gRows, tot, e.target, counts, avance));
     root.querySelector('#rp_print').addEventListener('click', e=> printReporte(e.target));
     if(keepScroll) window.scrollTo(0, scrollY);
     drawCards(cases);
@@ -1907,7 +1948,7 @@ async function printReporte(btn){
   setTimeout(()=> window.print(), 300);
 }
 
-async function exportReporteExcel(cases, gRows, tot, btn, counts){
+async function exportReporteExcel(cases, gRows, tot, btn, counts, avance){
   counts = counts || {};
   if(typeof XLSX === 'undefined'){ toast('No se pudo cargar el módulo de Excel. Verifica tu conexión.'); return; }
   if(!cases.length){ toast('No hay casos para exportar con estos filtros.'); return; }
@@ -1940,6 +1981,13 @@ async function exportReporteExcel(cases, gRows, tot, btn, counts){
     const resumen = gRows.map(([g,d])=>({'Gerencia':g,'Críticos':d.critico,'Altos':d.alto,'Medios':d.medio,'Bajos':d.bajo,'Total personas':d.total,'Fotos':d.fotos}));
     resumen.push({'Gerencia':'TOTAL','Críticos':tot.critico,'Altos':tot.alto,'Medios':tot.medio,'Bajos':tot.bajo,'Total personas':tot.total,'Fotos':tot.fotos});
     const wb = XLSX.utils.book_new();
+    if(avance){
+      const avRows = (obj)=>Object.entries(obj).map(([k,d])=>({'Nombre':k,'Visitas proyectadas':d.proy,'Visitas realizadas':d.vis,'Pendientes':d.proy-d.vis,'Avance %':d.proy?Math.round(d.vis/d.proy*100):0}));
+      const avAll = [{'Nombre':'TOTAL','Visitas proyectadas':avance.proyTotal,'Visitas realizadas':avance.visBase,'Pendientes':avance.proyTotal-avance.visBase,'Avance %':avance.proyTotal?Math.round(avance.visBase/avance.proyTotal*100):0}]
+        .concat([{'Nombre':'— Por sede —'}], avRows(avance.avS), [{'Nombre':'— Por gerencia —'}], avRows(avance.avG));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(avAll), 'Avance de visitas');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(avance.pendientes.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Sede':c.sede,'Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Dirección':c.direccion||''}))), 'Pendientes de visita');
+    }
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen por gerencia');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(casos), 'Casos');
     XLSX.writeFile(wb, `Reporte_Casos_${new Date().toISOString().slice(0,10)}.xlsx`);
