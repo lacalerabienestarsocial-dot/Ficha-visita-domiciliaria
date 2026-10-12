@@ -1732,10 +1732,10 @@ async function renderReporte(main){
 
   function draw(keepScroll){
     const f = root.querySelector('#rp_sede') ? currentFilters('rp', root) : {sede:'',gerencia:'',unidad:''};
-    const nivelSel = root.querySelector('#rp_nivel') ? root.querySelector('#rp_nivel').value : 'ambos';
+    const nivelSel = root.querySelector('#rp_nivel') ? root.querySelector('#rp_nivel').value : 'cam';
     const scrollY = window.scrollY;
     const base = applyFilters(all, f);
-    const cases = base.filter(v => nivelSel==='todos' ? true : nivelSel==='ambos' ? (v.nivelKey==='critico'||v.nivelKey==='alto') : v.nivelKey===nivelSel)
+    const cases = base.filter(v => nivelSel==='todos' ? true : nivelSel==='ambos' ? (v.nivelKey==='critico'||v.nivelKey==='alto') : nivelSel==='cam' ? (v.nivelKey!=='bajo') : v.nivelKey===nivelSel)
       .sort((a,b)=> (a.total - b.total));
     const nC = base.filter(v=>v.nivelKey==='critico').length;
     const nA = base.filter(v=>v.nivelKey==='alto').length;
@@ -1758,8 +1758,9 @@ async function renderReporte(main){
         <p class="hint" style="margin-bottom:8px;">Una fila por persona (si tiene varias fichas, se toma la más reciente).</p>
         ${bar.html}
         <select id="rp_nivel" style="margin-top:8px;">
-          <option value="ambos">Mostrar: Críticos y altos</option>
+          <option value="cam">Mostrar: Críticos, altos y medios</option>
           <option value="todos">Mostrar: Todos los casos</option>
+          <option value="ambos">Mostrar: Críticos y altos</option>
           <option value="critico">Mostrar: Solo críticos</option>
           <option value="alto">Mostrar: Solo altos</option>
           <option value="medio">Mostrar: Solo medios</option>
