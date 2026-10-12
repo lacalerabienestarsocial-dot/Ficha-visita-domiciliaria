@@ -522,9 +522,14 @@ async function getIndex(force){
   return rows.map(r => safeParse(r.IndexJSON)).filter(Boolean);
 }
 
+let _fullMapRows = null, _fullMap = null;
 async function getFullVisit(id){
   const rows = await fetchAllRows();
-  const match = rows.find(r => { const idx = safeParse(r.IndexJSON); return idx && idx.id === id; });
+  if(_fullMapRows !== rows){
+    _fullMapRows = rows; _fullMap = {};
+    rows.forEach(r => { const idx = safeParse(r.IndexJSON); if(idx && idx.id) _fullMap[idx.id] = r; });
+  }
+  const match = _fullMap[id];
   return match ? safeParse(match.FullJSON) : null;
 }
 
@@ -1730,7 +1735,7 @@ async function renderReporte(main){
     const nivelSel = root.querySelector('#rp_nivel') ? root.querySelector('#rp_nivel').value : 'ambos';
     const scrollY = window.scrollY;
     const base = applyFilters(all, f);
-    const cases = base.filter(v => nivelSel==='critico' ? v.nivelKey==='critico' : nivelSel==='alto' ? v.nivelKey==='alto' : (v.nivelKey==='critico'||v.nivelKey==='alto'))
+    const cases = base.filter(v => nivelSel==='todos' ? true : nivelSel==='ambos' ? (v.nivelKey==='critico'||v.nivelKey==='alto') : v.nivelKey===nivelSel)
       .sort((a,b)=> (a.total - b.total));
     const nC = base.filter(v=>v.nivelKey==='critico').length;
     const nA = base.filter(v=>v.nivelKey==='alto').length;
@@ -1749,23 +1754,28 @@ async function renderReporte(main){
     const bar = buildFilterBar('rp', all, ()=>draw());
     root.innerHTML = `
       <div class="card no-print">
-        <h3>Reporte de casos críticos y altos</h3>
+        <h3>Reporte de casos</h3>
         <p class="hint" style="margin-bottom:8px;">Una fila por persona (si tiene varias fichas, se toma la más reciente).</p>
         ${bar.html}
         <select id="rp_nivel" style="margin-top:8px;">
           <option value="ambos">Mostrar: Críticos y altos</option>
+          <option value="todos">Mostrar: Todos los casos</option>
           <option value="critico">Mostrar: Solo críticos</option>
           <option value="alto">Mostrar: Solo altos</option>
+          <option value="medio">Mostrar: Solo medios</option>
+          <option value="bajo">Mostrar: Solo bajos</option>
         </select>
         <button class="btn btn-primary btn-block" id="rp_excel" style="margin-top:10px;">⬇️ Descargar reporte en Excel</button>
         <button class="btn btn-outline btn-block" id="rp_print" style="margin-top:8px;">🖨️ Imprimir / guardar en PDF (con fotos)</button>
       </div>
-      <div class="print-title">Reporte de casos críticos y altos — Bienestar Social, La Calera S.A.C. — ${new Date().toLocaleDateString('es-PE')}</div>
+      <div class="print-title">Reporte de casos de visita domiciliaria — Bienestar Social, La Calera S.A.C. — ${new Date().toLocaleDateString('es-PE')}</div>
       <div class="card">
         <h3>Resumen</h3>
         <div class="rp-kpis">
           <div style="border-color:${CRITICIDAD.critico.color}"><b style="color:${CRITICIDAD.critico.color}">${nC}</b><span>Críticos</span></div>
           <div style="border-color:${CRITICIDAD.alto.color}"><b style="color:${CRITICIDAD.alto.color}">${nA}</b><span>Altos</span></div>
+          <div style="border-color:${CRITICIDAD.medio.color}"><b style="color:${CRITICIDAD.medio.color}">${base.filter(v=>v.nivelKey==='medio').length}</b><span>Medios</span></div>
+          <div style="border-color:${CRITICIDAD.bajo.color}"><b style="color:${CRITICIDAD.bajo.color}">${base.filter(v=>v.nivelKey==='bajo').length}</b><span>Bajos</span></div>
           <div><b>${base.length}</b><span>Personas visitadas</span></div>
           <div><b>${photoCountsCache===null && !Object.keys(counts).length ? '…' : nPhotos}</b><span>Fotos tomadas</span></div>
         </div>
@@ -1787,11 +1797,11 @@ async function renderReporte(main){
       <div class="card">
         <h3>Ubicación de los casos (${cases.length})</h3>
         <div id="rpMap" class="rp-map"></div>
-        <div class="legend"><span><i style="background:${CRITICIDAD.critico.color}"></i>Crítico</span><span><i style="background:${CRITICIDAD.alto.color}"></i>Alto</span></div>
+        <div class="legend">${Object.values(CRITICIDAD).map(c=>`<span><i style="background:${c.color}"></i>${c.label}</span>`).join('')}</div>
       </div>
       <div class="card">
-        <h3>Personas en situación crítica y alta</h3>
-        <div id="rpCards">${cases.length ? '<p class="hint">Cargando detalle...</p>' : emptyState('No hay casos críticos o altos con estos filtros.')}</div>
+        <h3>Personas del reporte (${cases.length})</h3>
+        <div id="rpCards">${cases.length ? '<p class="hint">Cargando detalle...</p>' : emptyState('No hay casos con estos filtros.')}</div>
       </div>`;
     bar.bind(root);
     const sec = root.querySelector('#rp_seccion'); if(sec) sec.style.display='none';
@@ -1804,7 +1814,7 @@ async function renderReporte(main){
       const g = tr.dataset.g;
       if([...sel.options].some(o=>o.value===g)){ sel.value = g; draw(); window.scrollTo(0,0); }
     }));
-    root.querySelector('#rp_excel').addEventListener('click', e=> exportReporteExcel(cases, gRows, tot, e.target));
+    root.querySelector('#rp_excel').addEventListener('click', e=> exportReporteExcel(cases, gRows, tot, e.target, counts));
     root.querySelector('#rp_print').addEventListener('click', e=> printReporte(e.target));
     if(keepScroll) window.scrollTo(0, scrollY);
     drawCards(cases);
@@ -1881,7 +1891,8 @@ async function printReporte(btn){
   setTimeout(()=> window.print(), 300);
 }
 
-async function exportReporteExcel(cases, gRows, tot, btn){
+async function exportReporteExcel(cases, gRows, tot, btn, counts){
+  counts = counts || {};
   if(typeof XLSX === 'undefined'){ toast('No se pudo cargar el módulo de Excel. Verifica tu conexión.'); return; }
   if(!cases.length){ toast('No hay casos para exportar con estos filtros.'); return; }
   const old = btn.textContent; btn.disabled = true;
@@ -1893,7 +1904,7 @@ async function exportReporteExcel(cases, gRows, tot, btn){
       const full = await getFullVisit(v.id);
       const c = (full && full.colaborador) || {};
       const u = c.ubicacion || {};
-      const photos = (await apiGetPhotos(v.dni, false)) || [];
+      const photos = (counts[v.dni] === 0) ? [] : ((await apiGetPhotos(v.dni, false)) || []);
       casos.push({
         'Nivel': CRITICIDAD[v.nivelKey].label,
         'Puntaje total': v.total,
@@ -1912,8 +1923,8 @@ async function exportReporteExcel(cases, gRows, tot, btn){
     resumen.push({'Gerencia':'TOTAL','Críticos':tot.critico,'Altos':tot.alto,'Medios':tot.medio,'Bajos':tot.bajo,'Total personas':tot.total,'Fotos':tot.fotos});
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen por gerencia');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(casos), 'Casos críticos y altos');
-    XLSX.writeFile(wb, `Reporte_Casos_Criticos_Altos_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(casos), 'Casos');
+    XLSX.writeFile(wb, `Reporte_Casos_${new Date().toISOString().slice(0,10)}.xlsx`);
     toast('Reporte descargado');
   }catch(err){ console.error(err); toast('Ocurrió un error generando el reporte'); }
   finally{ btn.textContent = old; btn.disabled = false; }
