@@ -1767,6 +1767,7 @@ async function renderReporte(main){
 
   function draw(keepScroll){
     const f = root.querySelector('#rp_sede') ? currentFilters('rp', root) : {sede:'',gerencia:'',unidad:''};
+    f.sede = 'Chincha'; // el reporte es solo de Chincha
     const nivelSel = root.querySelector('#rp_nivel') ? root.querySelector('#rp_nivel').value : 'cam';
     const scrollY = window.scrollY;
     const base = applyFilters(all, f);
@@ -1791,7 +1792,10 @@ async function renderReporte(main){
     COLABORADORES.forEach(c=>{ colabByDni[c.dni] = c; });
     const proyList = Object.values(colabByDni).filter(c=>
       (!f.sede || c.sede===f.sede) && (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad));
-    const visitedSet = new Set(base.map(v=>v.dni));
+    const webVisited = new Set(base.map(v=>v.dni));
+    // En Chincha, toda persona con estado (visita realizada, contacto sin respuesta o visita rechazada) ya fue contactada: no queda pendiente.
+    const visitedSet = new Set(webVisited);
+    COLABORADORES.forEach(c=>{ if(c.estado) visitedSet.add(c.dni); });
     const avG = {}, avS = {};
     const addAv = (obj,k,done)=>{ const d = obj[k] = obj[k] || {proy:0,vis:0}; d.proy++; if(done) d.vis++; };
     proyList.forEach(c=>{ const done = visitedSet.has(c.dni); addAv(avG, c.gerencia||'(sin gerencia)', done); addAv(avS, c.sede||'(sin sede)', done); });
@@ -1806,14 +1810,14 @@ async function renderReporte(main){
     const chList = (!f.sede || f.sede==='Chincha') ? COLABORADORES.filter(c=> c.sede==='Chincha' &&
       (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad)) : [];
     const chDedup = Object.values(chList.reduce((m,c)=>{ m[c.dni]=m[c.dni]||c; return m; }, {}));
-    const chEstado = c => visitedSet.has(c.dni) ? 'realizada' : (c.estado || 'pendiente');
+    const chEstado = c => webVisited.has(c.dni) ? 'realizada' : (c.estado || 'pendiente');
     const chCount = {realizada:0, sin_respuesta:0, rechazada:0, pendiente:0};
     chDedup.forEach(c=>{ chCount[chEstado(c)]++; });
     avance.chRows = chDedup.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Estado de la visita':(ESTADOS_CH[chEstado(c)]||{label:'Sin estado aún'}).label}));
     const bar = buildFilterBar('rp', all, ()=>draw());
     root.innerHTML = `
       <div class="card no-print">
-        <h3>Reporte de casos</h3>
+        <h3>Reporte de casos — Chincha</h3>
         <p class="hint" style="margin-bottom:8px;">Una fila por persona (si tiene varias fichas, se toma la más reciente).</p>
         ${bar.html}
         <select id="rp_nivel" style="margin-top:8px;">
@@ -1828,7 +1832,7 @@ async function renderReporte(main){
         <button class="btn btn-primary btn-block" id="rp_excel" style="margin-top:10px;">⬇️ Descargar reporte en Excel</button>
         <button class="btn btn-outline btn-block" id="rp_print" style="margin-top:8px;">🖨️ Imprimir / guardar en PDF (con fotos)</button>
       </div>
-      <div class="print-title">Reporte de casos de visita domiciliaria — Bienestar Social, La Calera S.A.C. — ${new Date().toLocaleDateString('es-PE')}</div>
+      <div class="print-title">Reporte de visitas domiciliarias CHINCHA — Bienestar Social, La Calera S.A.C. — ${new Date().toLocaleDateString('es-PE')}</div>
       <div class="card">
         <h3>Resumen</h3>
         <div class="rp-kpis">
@@ -1877,6 +1881,7 @@ async function renderReporte(main){
       </div>`;
     bar.bind(root);
     const sec = root.querySelector('#rp_seccion'); if(sec) sec.style.display='none';
+    const sedeSel = root.querySelector('#rp_sede'); if(sedeSel) sedeSel.style.display='none';
     // restaurar valores
     ['sede','gerencia','unidad'].forEach(k=>{ const el = root.querySelector('#rp_'+k); if(el) el.value = f[k]; });
     root.querySelector('#rp_nivel').value = nivelSel;
