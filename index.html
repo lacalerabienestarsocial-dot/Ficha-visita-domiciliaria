@@ -1801,7 +1801,7 @@ async function renderReporte(main){
     const webVisited = new Set(base.map(v=>normDni(v.dni)));
     // En Chincha, toda persona con estado (visita realizada, contacto sin respuesta o visita rechazada) ya fue contactada: no queda pendiente.
     const visitedSet = new Set(webVisited);
-    COLABORADORES.forEach(c=>{ if(c.estado) visitedSet.add(normDni(c.dni)); });
+    COLABORADORES.forEach(c=>{ if(c.estado && c.estado!=='realizada') visitedSet.add(normDni(c.dni)); });
     const avG = {}, avS = {};
     const addAv = (obj,k,done)=>{ const d = obj[k] = obj[k] || {proy:0,vis:0}; d.proy++; if(done) d.vis++; };
     proyList.forEach(c=>{ const done = visitedSet.has(normDni(c.dni)); addAv(avG, c.gerencia||'(sin gerencia)', done); addAv(avS, c.sede||'(sin sede)', done); });
@@ -1816,10 +1816,18 @@ async function renderReporte(main){
     const chList = (!f.sede || f.sede==='Chincha') ? COLABORADORES.filter(c=> c.sede==='Chincha' &&
       (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad)) : [];
     const chDedup = Object.values(chList.reduce((m,c)=>{ m[c.dni]=m[c.dni]||c; return m; }, {}));
+    // Ajuste acordado: sale Mamani Huahuatico Felix (21816036) de Chincha y entra Cristian Yataco (con ficha) para mantener el total en 246.
+    const SALE_CH = new Set(['21816036']);
+    for(let k=chDedup.length-1;k>=0;k--){ if(SALE_CH.has(normDni(chDedup[k].dni))) chDedup.splice(k,1); }
+    const extraFicha = [];
+    if(!f.gerencia && !f.unidad){
+      const chDnis = new Set(chDedup.map(c=>normDni(c.dni)));
+      base.forEach(v=>{ const k=normDni(v.dni); if(!sedeBase[k] && !chDnis.has(k)){ chDnis.add(k); chDedup.push({dni:v.dni, nombre:v.nombre||'(sin nombre)', puesto:'', gerencia:v.gerencia||'(sin gerencia)', unidad:v.unidad||'', distrito:v.distrito||''}); } });
+    }
     // Criterio acordado: si la persona tiene ficha en la web, la visita se realizó (aunque el Excel de seguimiento diga otro estado). Si no, vale el estado del Excel.
     const visitByDni = {};
     all.forEach(v=>{ visitByDni[normDni(v.dni)] = v; });
-    const chEstado = c => webVisited.has(normDni(c.dni)) ? 'realizada' : (c.estado || 'pendiente');
+    const chEstado = c => webVisited.has(normDni(c.dni)) ? 'realizada' : (c.estado==='realizada' ? 'pendiente' : (c.estado || 'pendiente'));
     const chCount = {realizada:0, sin_respuesta:0, rechazada:0, pendiente:0};
     chDedup.forEach(c=>{ chCount[chEstado(c)]++; });
     avance.chRows = chDedup.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Estado de la visita':(ESTADOS_CH[chEstado(c)]||{label:'Sin estado aún'}).label,'Ficha llenada en la web':(webVisited.has(normDni(c.dni))?'Sí':'No')}));
@@ -1828,7 +1836,7 @@ async function renderReporte(main){
       <div class="card no-print">
         <h3>Reporte de casos — Chincha</h3>
         <p class="hint" style="margin-bottom:8px;">Una fila por persona (si tiene varias fichas, se toma la más reciente).</p>
-        <p class="hint" style="margin-bottom:8px;">Versión de la web: 19-oct · v19</p>
+        <p class="hint" style="margin-bottom:8px;">Versión de la web: 19-oct · v23</p>
         ${bar.html}
         <select id="rp_nivel" style="margin-top:8px;">
           <option value="cam">Mostrar: Críticos, altos y medios</option>
@@ -1856,10 +1864,10 @@ async function renderReporte(main){
       </div>
       ${chDedup.length ? `<div class="card">
         <h3>Estado de visitas en Chincha</h3>
-        <p class="hint" style="margin-bottom:8px;">${chDedup.length} colaboradores de Chincha. Toca un estado para ver quiénes son.</p>
+        <p class="hint" style="margin-bottom:8px;">${chDedup.length} colaboradores de Chincha. Toca un estado para ver quiénes son.${extraFicha.length?` Además hay ${extraFicha.length} persona con ficha que no está en la lista (${extraFicha.map(v=>esc(v.nombre)).join(', ')}); se ve en "Personas del reporte" pero no suma a este total.`:''}</p>
         <div class="rp-kpis">
           ${['realizada','sin_respuesta','rechazada'].map(k=>`<div class="est-tile${estSel===k?' active':''}" data-est="${k}" style="border-color:${ESTADOS_CH[k].color}"><b style="color:${ESTADOS_CH[k].color}">${chCount[k]}</b><span>${ESTADOS_CH[k].label}</span></div>`).join('')}
-          <div class="est-tile${estSel==='pendiente'?' active':''}" data-est="pendiente"><b>${chCount.pendiente}</b><span>Sin estado aún</span></div>
+          <div class="est-tile${estSel==='pendiente'?' active':''}" data-est="pendiente"><b>${chCount.pendiente}</b><span>Pendiente (sin ficha en la web)</span></div>
         </div>
         <div id="estList">${estSel ? `<div class="table-scroll" style="margin-top:10px;"><table class="data-table">
           <thead><tr><th>Nombre</th><th>DNI</th><th>Ficha y fotos</th><th>Gerencia</th><th>Unidad</th><th>Distrito</th></tr></thead>
