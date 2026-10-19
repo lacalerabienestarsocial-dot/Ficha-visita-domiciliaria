@@ -1816,8 +1816,10 @@ async function renderReporte(main){
     const chList = (!f.sede || f.sede==='Chincha') ? COLABORADORES.filter(c=> c.sede==='Chincha' &&
       (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad)) : [];
     const chDedup = Object.values(chList.reduce((m,c)=>{ m[c.dni]=m[c.dni]||c; return m; }, {}));
-    // El estado oficial es el del Excel de seguimiento; la ficha de la web solo se marca aparte (columna "Ficha en la web").
-    const chEstado = c => c.estado || (webVisited.has(normDni(c.dni)) ? 'realizada' : 'pendiente');
+    // Criterio acordado: si la persona tiene ficha en la web, la visita se realizó (aunque el Excel de seguimiento diga otro estado). Si no, vale el estado del Excel.
+    const visitByDni = {};
+    all.forEach(v=>{ visitByDni[normDni(v.dni)] = v; });
+    const chEstado = c => webVisited.has(normDni(c.dni)) ? 'realizada' : (c.estado || 'pendiente');
     const chCount = {realizada:0, sin_respuesta:0, rechazada:0, pendiente:0};
     chDedup.forEach(c=>{ chCount[chEstado(c)]++; });
     avance.chRows = chDedup.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Estado de la visita':(ESTADOS_CH[chEstado(c)]||{label:'Sin estado aún'}).label,'Ficha llenada en la web':(webVisited.has(normDni(c.dni))?'Sí':'No')}));
@@ -1826,7 +1828,7 @@ async function renderReporte(main){
       <div class="card no-print">
         <h3>Reporte de casos — Chincha</h3>
         <p class="hint" style="margin-bottom:8px;">Una fila por persona (si tiene varias fichas, se toma la más reciente).</p>
-        <p class="hint" style="margin-bottom:8px;">Versión de la web: 19-oct · v17</p>
+        <p class="hint" style="margin-bottom:8px;">Versión de la web: 19-oct · v19</p>
         ${bar.html}
         <select id="rp_nivel" style="margin-top:8px;">
           <option value="cam">Mostrar: Críticos, altos y medios</option>
@@ -1860,8 +1862,8 @@ async function renderReporte(main){
           <div class="est-tile${estSel==='pendiente'?' active':''}" data-est="pendiente"><b>${chCount.pendiente}</b><span>Sin estado aún</span></div>
         </div>
         <div id="estList">${estSel ? `<div class="table-scroll" style="margin-top:10px;"><table class="data-table">
-          <thead><tr><th>Nombre</th><th>DNI</th><th>Ficha en la web</th><th>Gerencia</th><th>Unidad</th><th>Distrito</th></tr></thead>
-          <tbody>${chDedup.filter(c=>chEstado(c)===estSel).map(c=>`<tr><td>${esc(c.nombre)}<div class="hint">${esc(c.puesto||'')}</div></td><td>${esc(c.dni)}</td><td>${webVisited.has(normDni(c.dni)) ? '✔ Sí' : '— No'}</td><td>${esc(c.gerencia)}</td><td>${esc(c.unidad)}</td><td>${esc(c.distrito||'')}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px;">Nadie en este estado</td></tr>'}</tbody>
+          <thead><tr><th>Nombre</th><th>DNI</th><th>Ficha y fotos</th><th>Gerencia</th><th>Unidad</th><th>Distrito</th></tr></thead>
+          <tbody>${chDedup.filter(c=>chEstado(c)===estSel).map(c=>`<tr><td>${esc(c.nombre)}<div class="hint">${esc(c.puesto||'')}</div></td><td>${esc(c.dni)}</td><td>${visitByDni[normDni(c.dni)] ? `<button class="btn btn-ghost" style="padding:5px 9px;font-size:11px;white-space:nowrap;" data-estficha="${esc(visitByDni[normDni(c.dni)].id)}">📷 Ver ficha y fotos</button>` : '<span class="hint">Sin ficha en la web</span>'}</td><td>${esc(c.gerencia)}</td><td>${esc(c.unidad)}</td><td>${esc(c.distrito||'')}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px;">Nadie en este estado</td></tr>'}</tbody>
         </table></div>` : ''}</div>
       </div>` : ''}
       <div class="card">
@@ -1894,6 +1896,7 @@ async function renderReporte(main){
     ['sede','gerencia','unidad'].forEach(k=>{ const el = root.querySelector('#rp_'+k); if(el) el.value = f[k]; });
     root.querySelector('#rp_nivel').value = nivelSel;
     root.querySelector('#rp_nivel').addEventListener('change', ()=>draw());
+    root.querySelectorAll('[data-estficha]').forEach(b=> b.addEventListener('click', ()=> openVisitDetail(b.dataset.estficha)));
     root.querySelectorAll('.est-tile').forEach(t=> t.addEventListener('click', ()=>{
       estSel = (estSel === t.dataset.est) ? '' : t.dataset.est;
       draw(true);
