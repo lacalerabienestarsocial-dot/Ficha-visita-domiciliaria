@@ -1816,7 +1816,8 @@ async function renderReporte(main){
     const chList = (!f.sede || f.sede==='Chincha') ? COLABORADORES.filter(c=> c.sede==='Chincha' &&
       (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad)) : [];
     const chDedup = Object.values(chList.reduce((m,c)=>{ m[c.dni]=m[c.dni]||c; return m; }, {}));
-    const chEstado = c => webVisited.has(normDni(c.dni)) ? 'realizada' : (c.estado || 'pendiente');
+    // El estado oficial es el del Excel de seguimiento; la ficha de la web solo se marca aparte (columna "Ficha en la web").
+    const chEstado = c => c.estado || (webVisited.has(normDni(c.dni)) ? 'realizada' : 'pendiente');
     const chCount = {realizada:0, sin_respuesta:0, rechazada:0, pendiente:0};
     chDedup.forEach(c=>{ chCount[chEstado(c)]++; });
     avance.chRows = chDedup.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Estado de la visita':(ESTADOS_CH[chEstado(c)]||{label:'Sin estado aún'}).label,'Ficha llenada en la web':(webVisited.has(normDni(c.dni))?'Sí':'No')}));
