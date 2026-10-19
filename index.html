@@ -1756,7 +1756,13 @@ function riesgoBadge(rec){
 
 async function renderReporte(main){
   main.innerHTML = `<div class="card"><p class="hint">Cargando datos...</p></div>`;
-  const all = dedupeByDni(await getIndex());
+  const normDni = d => String(d||'').trim().replace(/^0+/,'');
+  const sedeBase = {};
+  COLABORADORES.forEach(c=>{ sedeBase[normDni(c.dni)] = c.sede; });
+  // Una ficha cuenta como de Chincha si la persona figura en Chincha en la base, aunque el encuestador haya marcado otra sede.
+  const all = dedupeByDni(await getIndex())
+    .filter(v => v.sede==='Chincha' || sedeBase[normDni(v.dni)]==='Chincha')
+    .map(v => ({...v, sede:'Chincha'}));
   main.innerHTML = `<div id="rpRoot"></div>`;
   const root = document.getElementById('rpRoot');
   let map = null;
@@ -1792,17 +1798,17 @@ async function renderReporte(main){
     COLABORADORES.forEach(c=>{ colabByDni[c.dni] = c; });
     const proyList = Object.values(colabByDni).filter(c=>
       (!f.sede || c.sede===f.sede) && (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad));
-    const webVisited = new Set(base.map(v=>v.dni));
+    const webVisited = new Set(base.map(v=>normDni(v.dni)));
     // En Chincha, toda persona con estado (visita realizada, contacto sin respuesta o visita rechazada) ya fue contactada: no queda pendiente.
     const visitedSet = new Set(webVisited);
-    COLABORADORES.forEach(c=>{ if(c.estado) visitedSet.add(c.dni); });
+    COLABORADORES.forEach(c=>{ if(c.estado) visitedSet.add(normDni(c.dni)); });
     const avG = {}, avS = {};
     const addAv = (obj,k,done)=>{ const d = obj[k] = obj[k] || {proy:0,vis:0}; d.proy++; if(done) d.vis++; };
-    proyList.forEach(c=>{ const done = visitedSet.has(c.dni); addAv(avG, c.gerencia||'(sin gerencia)', done); addAv(avS, c.sede||'(sin sede)', done); });
+    proyList.forEach(c=>{ const done = visitedSet.has(normDni(c.dni)); addAv(avG, c.gerencia||'(sin gerencia)', done); addAv(avS, c.sede||'(sin sede)', done); });
     const proyTotal = proyList.length;
-    const visBase = proyList.filter(c=>visitedSet.has(c.dni)).length;
-    const fueraBase = base.filter(v=>!colabByDni[v.dni]).length;
-    const pendientes = proyList.filter(c=>!visitedSet.has(c.dni));
+    const visBase = proyList.filter(c=>visitedSet.has(normDni(c.dni))).length;
+    const fueraBase = base.filter(v=>!sedeBase[normDni(v.dni)]).length;
+    const pendientes = proyList.filter(c=>!visitedSet.has(normDni(c.dni)));
     const pct = n=> proyTotal ? Math.round(n/proyTotal*100) : 0;
     const avance = {proyTotal, visBase, fueraBase, pendientes, avG, avS};
     const rowAv = ([k,d])=>`<tr><td>${esc(k)}</td><td>${d.proy}</td><td><b>${d.vis}</b></td><td>${d.proy-d.vis}</td><td>${d.proy?Math.round(d.vis/d.proy*100):0}%</td></tr>`;
@@ -1810,10 +1816,10 @@ async function renderReporte(main){
     const chList = (!f.sede || f.sede==='Chincha') ? COLABORADORES.filter(c=> c.sede==='Chincha' &&
       (!f.gerencia || c.gerencia===f.gerencia) && (!f.unidad || c.unidad===f.unidad)) : [];
     const chDedup = Object.values(chList.reduce((m,c)=>{ m[c.dni]=m[c.dni]||c; return m; }, {}));
-    const chEstado = c => webVisited.has(c.dni) ? 'realizada' : (c.estado || 'pendiente');
+    const chEstado = c => webVisited.has(normDni(c.dni)) ? 'realizada' : (c.estado || 'pendiente');
     const chCount = {realizada:0, sin_respuesta:0, rechazada:0, pendiente:0};
     chDedup.forEach(c=>{ chCount[chEstado(c)]++; });
-    avance.chRows = chDedup.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Estado de la visita':(ESTADOS_CH[chEstado(c)]||{label:'Sin estado aún'}).label}));
+    avance.chRows = chDedup.map(c=>({'DNI':c.dni,'Nombre':c.nombre,'Puesto':c.puesto||'','Gerencia':c.gerencia,'Unidad organizativa':c.unidad,'Distrito':c.distrito||'','Estado de la visita':(ESTADOS_CH[chEstado(c)]||{label:'Sin estado aún'}).label,'Ficha llenada en la web':(webVisited.has(normDni(c.dni))?'Sí':'No')}));
     const bar = buildFilterBar('rp', all, ()=>draw());
     root.innerHTML = `
       <div class="card no-print">
@@ -1852,8 +1858,8 @@ async function renderReporte(main){
           <div class="est-tile${estSel==='pendiente'?' active':''}" data-est="pendiente"><b>${chCount.pendiente}</b><span>Sin estado aún</span></div>
         </div>
         <div id="estList">${estSel ? `<div class="table-scroll" style="margin-top:10px;"><table class="data-table">
-          <thead><tr><th>Nombre</th><th>DNI</th><th>Gerencia</th><th>Unidad</th><th>Distrito</th></tr></thead>
-          <tbody>${chDedup.filter(c=>chEstado(c)===estSel).map(c=>`<tr><td>${esc(c.nombre)}<div class="hint">${esc(c.puesto||'')}</div></td><td>${esc(c.dni)}</td><td>${esc(c.gerencia)}</td><td>${esc(c.unidad)}</td><td>${esc(c.distrito||'')}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px;">Nadie en este estado</td></tr>'}</tbody>
+          <thead><tr><th>Nombre</th><th>DNI</th><th>Ficha en la web</th><th>Gerencia</th><th>Unidad</th><th>Distrito</th></tr></thead>
+          <tbody>${chDedup.filter(c=>chEstado(c)===estSel).map(c=>`<tr><td>${esc(c.nombre)}<div class="hint">${esc(c.puesto||'')}</div></td><td>${esc(c.dni)}</td><td>${webVisited.has(normDni(c.dni)) ? '✔ Sí' : '— No'}</td><td>${esc(c.gerencia)}</td><td>${esc(c.unidad)}</td><td>${esc(c.distrito||'')}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px;">Nadie en este estado</td></tr>'}</tbody>
         </table></div>` : ''}</div>
       </div>` : ''}
       <div class="card">
